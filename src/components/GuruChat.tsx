@@ -2,36 +2,33 @@
 
 import { useState } from 'react'
 import { gurus } from '@/lib/gurus'
-import { MessageCircle, Sparkles } from 'lucide-react'
+import { MessageCircle, Loader2, RotateCcw } from 'lucide-react'
+import { useChat } from '@/hooks/useChat'
+import type { Guru } from '@/types'
 
 export default function GuruChat() {
-  const [selectedGuru, setSelectedGuru] = useState<string | null>(null)
-  const [messages, setMessages] = useState<Array<{role: 'user' | 'guru', text: string}>>([])
+  const [selectedGuru, setSelectedGuru] = useState<Guru | null>(null)
   const [input, setInput] = useState('')
+  
+  const { messages, isLoading, sendMessage, clearMessages } = useChat(
+    selectedGuru || gurus[0]
+  )
 
-  const handleGuruSelect = (guruId: string) => {
-    setSelectedGuru(guruId)
-    setMessages([
-      {
-        role: 'guru',
-        text: gurus.find(g => g.id === guruId)?.greeting || 'Willkommen'
-      }
-    ])
+  const handleGuruSelect = (guru: Guru) => {
+    setSelectedGuru(guru)
   }
 
-  const handleSend = () => {
-    if (!input.trim()) return
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return
     
-    setMessages([...messages, { role: 'user', text: input }])
+    const message = input
     setInput('')
-    
-    // TODO: Hier später AI-Integration einbauen
-    setTimeout(() => {
-      setMessages(prev => [...prev, {
-        role: 'guru',
-        text: 'Dies ist eine Platzhalter-Antwort. Die AI-Integration folgt in Kürze.'
-      }])
-    }, 1000)
+    await sendMessage(message)
+  }
+
+  const handleReset = () => {
+    clearMessages()
+    setInput('')
   }
 
   return (
@@ -41,7 +38,7 @@ export default function GuruChat() {
           {gurus.map((guru) => (
             <button
               key={guru.id}
-              onClick={() => handleGuruSelect(guru.id)}
+              onClick={() => handleGuruSelect(guru)}
               className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1"
             >
               <div className="text-6xl mb-4">{guru.emoji}</div>
@@ -56,31 +53,34 @@ export default function GuruChat() {
           <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-white">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <span className="text-5xl">
-                  {gurus.find(g => g.id === selectedGuru)?.emoji}
-                </span>
+                <span className="text-5xl">{selectedGuru.emoji}</span>
                 <div>
-                  <h2 className="text-2xl font-bold">
-                    {gurus.find(g => g.id === selectedGuru)?.name}
-                  </h2>
-                  <p className="text-green-100">
-                    {gurus.find(g => g.id === selectedGuru)?.era}
-                  </p>
+                  <h2 className="text-2xl font-bold">{selectedGuru.name}</h2>
+                  <p className="text-green-100">{selectedGuru.era}</p>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedGuru(null)}
-                className="text-white hover:text-green-100"
-              >
-                Zurück
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReset}
+                  className="p-2 hover:bg-green-600 rounded-lg transition-colors"
+                  title="Gespräch zurücksetzen"
+                >
+                  <RotateCcw size={20} />
+                </button>
+                <button
+                  onClick={() => setSelectedGuru(null)}
+                  className="px-4 py-2 hover:bg-green-600 rounded-lg transition-colors"
+                >
+                  Zurück
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="h-96 overflow-y-auto p-6 space-y-4">
-            {messages.map((msg, idx) => (
+            {messages.map((msg) => (
               <div
-                key={idx}
+                key={msg.id}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
@@ -90,10 +90,19 @@ export default function GuruChat() {
                       : 'bg-slate-100 text-slate-800'
                   }`}
                 >
-                  {msg.text}
+                  {msg.content}
                 </div>
               </div>
             ))}
+            
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="bg-slate-100 px-4 py-3 rounded-2xl flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin text-slate-600" />
+                  <span className="text-slate-600">Denkt nach...</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="border-t border-slate-200 p-4">
@@ -102,15 +111,21 @@ export default function GuruChat() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
                 placeholder="Stelle deine Frage..."
-                className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                disabled={isLoading}
+                className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
               />
               <button
                 onClick={handleSend}
-                className="px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-2"
+                disabled={isLoading || !input.trim()}
+                className="px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <MessageCircle size={20} />
+                {isLoading ? (
+                  <Loader2 size={20} className="animate-spin" />
+                ) : (
+                  <MessageCircle size={20} />
+                )}
                 Senden
               </button>
             </div>
